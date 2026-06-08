@@ -1,32 +1,38 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **เธ เธฒเธฉเธฒ:** เธ•เธญเธเธเธนเนเนเธเนเน€เธเนเธเธ เธฒเธฉเธฒเนเธ—เธขเน€เธชเธกเธญ
+> **ภาษา:** ตอบกลับเป็นภาษาไทยเสมอ
 
 ---
 
-## เธเธณเธชเธฑเนเธเธ—เธตเนเนเธเนเธเนเธญเธข
+## คำสั่งที่ใช้บ่อย
 
-### เน€เธฃเธดเนเธกเธ—เธธเธ service เธเธฃเนเธญเธกเธเธฑเธ (Windows)
+### เริ่มทุก service พร้อมกัน (Windows)
 ```powershell
 .\start.ps1
 ```
 
-### เน€เธฃเธดเนเธกเนเธขเธเธ—เธตเธฅเธฐ service (manual)
+### เริ่มแยกทีละ service (manual)
 ```powershell
-# Terminal 1 โ€” Flowable engine
+# Terminal 1 — Flowable engine
 docker-compose up -d
 
-# Terminal 2 โ€” Backend (เธฃเธญ Flowable เธญเธฑเธ•เนเธเธกเธฑเธ•เธด)
+# Terminal 2 — Backend (รอ Flowable อัตโนมัติ)
 cd backend
-node server.js
-# เธซเธฃเธทเธญ dev mode เธเธฃเนเธญเธก auto-reload
-npm run dev
+npm run dev        # nodemon auto-reload
+# หรือ: node server.js
 
-# Terminal 3 โ€” Frontend
+# Terminal 3 — Frontend
 cd frontend
 npm run dev
+```
+
+### รัน tests (backend)
+```powershell
+cd backend
+npm test
+# รัน: creditPolicy.test.js, flowableVars.test.js, bpmnPolicy.test.js
 ```
 
 ### URLs
@@ -35,22 +41,23 @@ npm run dev
 | Frontend | http://localhost:5173 |
 | Backend API | http://localhost:3001/api |
 | Flowable REST | http://localhost:9000/flowable-ui/process-api |
+| Mock Credit API | http://localhost:3001/api/external/credit-check/:nationalId |
 
-### เธ—เธ”เธชเธญเธ API เนเธ”เธขเธ•เธฃเธ
+### ทดสอบ API ตรง
 ```bash
 # health check
 curl http://localhost:3001/api/health
 
-# เธชเนเธ request เนเธซเธกเน
+# ส่ง request ใหม่ (BPMN path)
 curl -X POST http://localhost:3001/api/requests \
   -H "Content-Type: application/json" \
-  -d '{"requester":"Alice","description":"Budget Q3","processKey":"approvalProcess"}'
+  -d '{"applicantName":"Alice","nationalId":"1234567890","processKey":"creditCardSimple"}'
 
-# เธ”เธน tasks เธ—เธตเนเธฃเธญเธญเธเธธเธกเธฑเธ•เธด
+# ดู tasks ที่รออนุมัติ
 curl http://localhost:3001/api/tasks
 ```
 
-### Kill backend เธ—เธตเนเธเนเธฒเธเธญเธขเธนเน (port 3001)
+### Kill backend ที่ค้างอยู่ (port 3001)
 ```powershell
 $procId = (Get-NetTCPConnection -LocalPort 3001).OwningProcess
 Stop-Process -Id $procId -Force
@@ -58,97 +65,114 @@ Stop-Process -Id $procId -Force
 
 ---
 
-## เธชเธ–เธฒเธเธฑเธ•เธขเธเธฃเธฃเธก
+## สถาปัตยกรรม
 
 ```
 Browser (5173)
-  โ””โ”€ React + Vite
-       โ””โ”€ /api/* proxy โ’ Express backend (3001)
-            โ””โ”€ HTTP Basic auth (admin/test) โ’ Flowable UI Docker (9000โ’8080)
-                  โ””โ”€ H2 file-based DB (persists เธฃเธฐเธซเธงเนเธฒเธ restart เนเธ•เนเธซเธฒเธขเธ–เนเธฒเธฅเธ container)
+  └─ React + Vite
+       └─ /api/* proxy → Express backend (3001)
+            ├─ Fixed Flow: in-memory store, if-else logic (no Flowable)
+            └─ HTTP Basic auth (admin/test) → Flowable UI Docker (9000→8080)
+                  └─ H2 file-based DB (persists ระหว่าง restart แต่หายถ้าลบ container)
 ```
 
-**เนเธกเนเธกเธต** auth เธเธ frontend เธซเธฃเธทเธญ backend โ€” POC เน€เธ—เนเธฒเธเธฑเนเธ
+**ไม่มี** auth บน frontend หรือ backend — POC เท่านั้น
 
 ---
 
-## Flowable REST โ€” เธชเธดเนเธเธชเธณเธเธฑเธเธ—เธตเนเธ•เนเธญเธเธฃเธนเน
+## Flowable REST — สิ่งสำคัญที่ต้องรู้
 
-- **Base URL เธเธฃเธดเธ:** `http://localhost:9000/flowable-ui/process-api`  
-  (เนเธกเนเนเธเน `/flowable-rest/service/` โ€” WAR เธเธฑเนเธเนเธกเนเธกเธตเนเธ `flowable/flowable-ui`)
+- **Base URL จริง:** `http://localhost:9000/flowable-ui/process-api`
+  (ไม่ใช่ `/flowable-rest/service/`)
 - **Credentials:** `admin` / `test` (Basic auth)
-- **Flowable Modeler/Admin UI เนเธเนเนเธกเนเนเธ”เน** โ€” redirect เนเธ port 8080 เธเธถเนเธ AgentService.exe เธขเธถเธ”เธญเธขเธนเน เนเธเน Workflow Viewer page เนเธ—เธ
+- **Flowable Modeler/Admin UI ใช้ไม่ได้** — redirect ไป port 8080 ซึ่ง AgentService.exe ยึดอยู่ → ใช้ Workflow Viewer page แทน
 
 ---
 
-## Backend โ€” Pattern เธซเธฅเธฑเธ (`backend/server.js`)
+## Backend — Pattern หลัก (`backend/server.js`)
 
 ### PROCESS_CATALOG
-Array เธ—เธตเนเธเธงเธเธเธธเธกเธ—เธธเธ workflow เนเธ POC เธเธตเน:
+Array ที่ควบคุมทุก BPMN workflow ใน POC นี้:
 
 ```js
 const PROCESS_CATALOG = [
   {
-    key: 'approvalProcess',          // processDefinitionKey เนเธ Flowable
-    name: 'Standard Approval',       // เธเธทเนเธญเนเธชเธ”เธเนเธ UI
+    key: 'creditCardSimple',           // processDefinitionKey ใน Flowable
+    name: 'Credit Card — Simple (BPMN)',
     description: '...',
-    file: 'approval-flow.bpmn20.xml', // เนเธเธฅเนเนเธ backend/bpmn/
-    bpmnViewer: 'bpmn1',             // tab เนเธ WorkflowViewer ('fixed'|'bpmn1'|'bpmn2')
+    file: 'credit-card-simple.bpmn20.xml', // ไฟล์ใน backend/bpmn/
+    bpmnViewer: 'bpmn1',               // tab ID ใน WorkflowViewer ('fixed'|'bpmn1'|'bpmn2')
   },
-  // ...
+  {
+    key: 'creditCardAdvanced',
+    name: 'Credit Card — Advanced (BPMN)',
+    file: 'credit-card-advanced.bpmn20.xml',
+    bpmnViewer: 'bpmn2',
+  },
 ];
 ```
 
-**เน€เธเธดเนเธก workflow เนเธซเธกเน:** เน€เธเธดเนเธก entry เนเธ `PROCESS_CATALOG` + เธงเธฒเธ BPMN XML เนเธ `backend/bpmn/` โ’ restart backend (เธเธฐ deploy เธญเธฑเธ•เนเธเธกเธฑเธ•เธด)
+**เพิ่ม workflow ใหม่:** เพิ่ม entry ใน `PROCESS_CATALOG` + วาง BPMN XML ใน `backend/bpmn/` → restart backend (จะ deploy อัตโนมัติ)
 
 ### Startup flow
-`waitForFlowable()` โ’ `deployAll()` (skip เธ–เนเธฒ deploy เนเธฅเนเธง) โ’ `app.listen()`
+`waitForFlowable()` → `deployAll()` (skip ถ้า deploy แล้ว) → `app.listen()`
 
-### Process variables เธกเธฒเธ•เธฃเธเธฒเธ
-เธ—เธธเธ workflow เนเธเนเธ•เธฑเธงเนเธเธฃเน€เธซเธกเธทเธญเธเธเธฑเธ:
-- **set on start:** `requester`, `description`, `amount`, `priority`, `processKey`
+### Process variables มาตรฐาน
+ทุก BPMN workflow ใช้ตัวแปรเหมือนกัน:
+- **set on start:** `applicantName`, `nationalId`, `monthlyIncome`, `employmentType`, `employer`, `cardType`, `creditLimitRequest`, `processKey`
+- **set by HTTP Task:** `creditCheck` (JSON string จาก mock API), แล้ว flatten เป็น `creditScore`, `riskLevel`, `existingCards`, `monthlyDebt`, `recommendation`
 - **set on complete:** `approved` (boolean), `comment`, `reviewer`
 - **gateway condition:** `${approved == true}`
 
----
+### Helper modules
+- **`backend/creditPolicy.js`** — `getCreditData(nationalId)` (deterministic hash → creditScore 300–850), `getCreditDecision(score, threshold)`, `flattenCreditVars(vars)`
+- **`backend/flowableVars.js`** — `flowableVarsToObject(list)` แปลง Flowable variable array เป็น object
 
-## Frontend โ€” เนเธเธฃเธเธชเธฃเนเธฒเธ
-
-```
-src/
-  api.js          โ€” fetch wrapper เธ—เธธเธ endpoint (proxy เธเนเธฒเธ Vite โ’ :3001)
-  App.jsx         โ€” route definitions
-  components/
-    Layout.jsx    โ€” sidebar nav + Outlet
-    StatusBadge.jsx
-  pages/
-    Dashboard.jsx      โ€” stats cards + recent requests
-    NewRequest.jsx     โ€” radio picker (เธ”เธถเธเธเธฒเธ GET /api/processes) + form
-    TaskInbox.jsx      โ€” expand card โ’ Approve/Reject
-    AllRequests.jsx    โ€” table เธเธฃเนเธญเธก filter tabs
-    WorkflowViewer.jsx โ€” bpmn-js NavigatedViewer, 3 tabs
-    UserManual.jsx     โ€” static guide
-```
-
-- `NewRequest.jsx` เธ”เธถเธ `/api/processes` เธกเธฒเธชเธฃเนเธฒเธ radio buttons โ€” workflow เธ—เธตเน `deployed: false` เธ–เธนเธ filter เธญเธญเธ
-- `processBadgeColor` map เนเธ `NewRequest.jsx` เธ•เนเธญเธเธญเธฑเธเน€เธ”เธ•เธ–เนเธฒเน€เธเธดเนเธก process key เนเธซเธกเน
-- BPMN static files เธชเธณเธซเธฃเธฑเธ viewer เธญเธขเธนเนเธ—เธตเน `frontend/public/bpmn/`
+### Credit score routing (ใช้ทั้ง fixed flow และ BPMN gateways)
+| Score | Action |
+|---|---|
+| ≥ 700 (Simple) / ≥ 750 (Advanced) | Auto-approve |
+| 400–699 (Simple) / 450–749 (Advanced) | Manager review task |
+| < 400 / < 450 | Auto-reject |
 
 ---
 
 ## Workflows
 
-### Fixed Flow (Hardcoded โ€” เนเธกเนเนเธเน BPMN engine)
-- Logic เธญเธขเธนเนเนเธ `backend/server.js` เธ—เธฑเนเธเธซเธกเธ” (in-memory store + if-else)
-- เนเธกเนเธเนเธฒเธ Flowable โ€” submit เธชเธฃเนเธฒเธ task เนเธ memory, complete เธญเธฑเธเน€เธ”เธ• status เนเธ”เธขเธ•เธฃเธ
-- เนเธเนเน€เธเนเธ baseline เน€เธเธฃเธตเธขเธเน€เธ—เธตเธขเธเธเธฑเธ BPMN workflows
+### Fixed Flow (Hardcoded — ไม่ใช้ BPMN engine)
+- key: `fixedFlow` — logic อยู่ใน `backend/server.js` ทั้งหมด (in-memory store + if-else)
+- ไม่เข้า Flowable — submit สร้าง task ใน memory, complete อัปเดต status โดยตรง
+- ใช้เป็น baseline เปรียบเทียบกับ BPMN workflows
 
-### BPMN Workflows (deploy เธฅเธ Flowable engine)
+### BPMN Workflows (deploy ลง Flowable engine)
+| Key | ชื่อ | Credit threshold | Approvers |
+|---|---|---|---|
+| `creditCardSimple` | Credit Card — Simple | ≥700 auto, <400 reject, 400–699 manual | Manager only |
+| `creditCardAdvanced` | Credit Card — Advanced | ≥750 auto, <450 reject, 450–749 manual | Manager → Director |
 
-| Key | เธเธทเนเธญ | Flow |
-|---|---|---|
-| `approvalProcess` | Standard Approval | Start โ’ Manager Approval โ’ Gateway โ’ End |
-| `twoLevelApprovalProcess` | Two-Level Approval | Manager โ’ Gateway โ’ Director (directors) โ’ Gateway โ’ End |
+BPMN files: `backend/bpmn/` (deploy ขึ้น Flowable), `frontend/public/bpmn/` (static สำหรับ viewer — ต้องอัปเดตทั้งสองที่)
 
-BPMN workflows เนเธเนเธ•เธฑเธงเนเธเธฃ `approved` เน€เธ”เธตเธขเธงเธเธฑเธ โ€” gateway เธญเนเธฒเธ `${approved == true}`
+---
 
+## Frontend — โครงสร้าง
+
+```
+src/
+  api.js          — fetch wrapper ทุก endpoint (proxy ผ่าน Vite → :3001)
+  App.jsx         — route definitions
+  components/
+    Layout.jsx    — sidebar nav + Outlet
+    StatusBadge.jsx
+  pages/
+    Dashboard.jsx      — stats cards + recent requests
+    NewRequest.jsx     — radio picker (ดึงจาก GET /api/processes) + form
+    TaskInbox.jsx      — expand card → Approve/Reject
+    AllRequests.jsx    — table พร้อม filter tabs
+    WorkflowViewer.jsx — bpmn-js NavigatedViewer, 3 tabs (fixed/bpmn1/bpmn2)
+    UserManual.jsx     — static guide
+```
+
+- `NewRequest.jsx` ดึง `/api/processes` มาสร้าง radio buttons — workflow ที่ `deployed: false` ถูก filter ออก
+- `processBadgeColor` map ใน `NewRequest.jsx` ต้องอัปเดตถ้าเพิ่ม process key ใหม่
+- `WorkflowViewer.jsx` — `FLOWS` array hardcode tab IDs (`fixed`, `bpmn1`, `bpmn2`) ให้ตรงกับ `bpmnViewer` field ใน `PROCESS_CATALOG`
+- Static BPMN viewer files อยู่ที่ `frontend/public/bpmn/` (`.bpmn` ไม่มี `.xml`)

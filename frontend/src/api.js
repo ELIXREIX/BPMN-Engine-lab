@@ -18,4 +18,7 @@ export const api = {
   createRequest: (body) => req('POST', '/requests', body),
   getTasks: () => req('GET', '/tasks'),
   completeTask: (id, body) => req('POST', `/tasks/${id}/complete`, body),
+  getMonitorInstances: (processKey) => req('GET', `/monitor/instances${processKey ? `?processKey=${encodeURIComponent(processKey)}` : ''}`),
+  getBpmn: (key) => req('GET', `/bpmn/${key}`),
+  deployBpmn: (key, xml) => req('POST', `/bpmn/${key}/deploy`, { xml }),
 };
