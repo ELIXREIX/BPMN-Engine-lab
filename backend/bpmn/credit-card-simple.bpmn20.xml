@@ -1,126 +1,127 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<definitions
-  xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:flowable="http://flowable.org/bpmn"
-  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-  xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
-  xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
-  targetNamespace="http://www.flowable.org/processdef">
-
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.flowable.org/processdef">
   <process id="creditCardSimple" name="Credit Card Simple Approval" isExecutable="true">
-    <startEvent id="start" name="Application Submitted"/>
-
+    <startEvent id="start" name="Application Submitted" />
     <serviceTask id="creditCheckTask" name="Credit Check API" flowable:type="http">
       <extensionElements>
-        <flowable:field name="requestMethod" stringValue="GET"/>
-        <flowable:field name="requestUrl"><flowable:expression><![CDATA[http://host.docker.internal:3001/api/external/credit-check/${nationalId}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestMethod" stringValue="GET" />
+        <flowable:field name="requestUrl">
+          <flowable:expression>http://host.docker.internal:3001/api/external/credit-check/${nationalId}</flowable:expression>
+        </flowable:field>
         <flowable:field name="requestHeaders">
           <flowable:string>Accept: application/json</flowable:string>
         </flowable:field>
-        <flowable:field name="responseVariableName" stringValue="creditCheck"/>
-        <flowable:field name="saveResponseVariableAsJson" stringValue="true"/>
-        <flowable:executionListener event="end" expression="${execution.setVariable('creditScore', creditCheck.creditScore)}"/>
-        <flowable:executionListener event="end" expression="${execution.setVariable('riskLevel', creditCheck.riskLevel)}"/>
-        <flowable:executionListener event="end" expression="${execution.setVariable('existingCards', creditCheck.existingCards)}"/>
-        <flowable:executionListener event="end" expression="${execution.setVariable('monthlyDebt', creditCheck.monthlyDebt)}"/>
-        <flowable:executionListener event="end" expression="${execution.setVariable('recommendation', creditCheck.recommendation)}"/>
+        <flowable:field name="responseVariableName" stringValue="creditCheck" />
+        <flowable:field name="saveResponseVariableAsJson" stringValue="true" />
+        <flowable:executionListener event="end" expression="${execution.setVariable(&#39;creditScore&#39;, creditCheck.creditScore)}" />
+        <flowable:executionListener event="end" expression="${execution.setVariable(&#39;riskLevel&#39;, creditCheck.riskLevel)}" />
+        <flowable:executionListener event="end" expression="${execution.setVariable(&#39;existingCards&#39;, creditCheck.existingCards)}" />
+        <flowable:executionListener event="end" expression="${execution.setVariable(&#39;monthlyDebt&#39;, creditCheck.monthlyDebt)}" />
+        <flowable:executionListener event="end" expression="${execution.setVariable(&#39;recommendation&#39;, creditCheck.recommendation)}" />
       </extensionElements>
     </serviceTask>
-
-    <exclusiveGateway id="scoreGateway" name="Credit score?"/>
-
+    <exclusiveGateway id="scoreGateway" name="Credit score?" />
     <endEvent id="autoApprovedEnd" name="Auto Approved">
       <extensionElements>
-        <flowable:executionListener event="start" expression="${execution.setVariable('approved', true)}"/><flowable:executionListener event="start" expression="${execution.setVariable('reviewer', 'system')}"/><flowable:executionListener event="start" expression="${execution.setVariable('comment', 'Auto-approved by credit score')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable(&#39;approved&#39;, true)}" />
+        <flowable:executionListener event="start" expression="${execution.setVariable(&#39;reviewer&#39;, &#39;system&#39;)}" />
+        <flowable:executionListener event="start" expression="${execution.setVariable(&#39;comment&#39;, &#39;Auto-approved by credit score&#39;)}" />
       </extensionElements>
     </endEvent>
-
     <userTask id="managerReview" name="Manager Review" flowable:candidateGroups="managers">
       <documentation>Manual review for medium-risk credit card applications.</documentation>
     </userTask>
-
-    <exclusiveGateway id="managerDecisionGateway" name="Approved?" default="managerRejectedFlow"/>
-
-    <endEvent id="approvedEnd" name="Approved"/>
-    <endEvent id="rejectedEnd" name="Rejected"/>
-
+    <exclusiveGateway id="managerDecisionGateway" name="Approved?" default="managerRejectedFlow" />
+    <endEvent id="approvedEnd" name="Approved" />
+    <endEvent id="rejectedEnd" name="Rejected" />
     <endEvent id="autoRejectedEnd" name="Auto Rejected">
       <extensionElements>
-        <flowable:executionListener event="start" expression="${execution.setVariable('approved', false)}"/><flowable:executionListener event="start" expression="${execution.setVariable('reviewer', 'system')}"/><flowable:executionListener event="start" expression="${execution.setVariable('comment', 'Auto-rejected by credit score')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable(&#39;approved&#39;, false)}" />
+        <flowable:executionListener event="start" expression="${execution.setVariable(&#39;reviewer&#39;, &#39;system&#39;)}" />
+        <flowable:executionListener event="start" expression="${execution.setVariable(&#39;comment&#39;, &#39;Auto-rejected by credit score&#39;)}" />
       </extensionElements>
     </endEvent>
-
-    <sequenceFlow id="flowStartToCredit" sourceRef="start" targetRef="creditCheckTask"/>
-    <sequenceFlow id="flowCreditToGateway" sourceRef="creditCheckTask" targetRef="scoreGateway"/>
-    <sequenceFlow id="flowAutoApprove" name="Score >= 700" sourceRef="scoreGateway" targetRef="autoApprovedEnd">
-      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${creditScore >= 700}]]></conditionExpression>
+    <sequenceFlow id="flowStartToCredit" sourceRef="start" targetRef="creditCheckTask" />
+    <sequenceFlow id="flowCreditToGateway" sourceRef="creditCheckTask" targetRef="scoreGateway" />
+    <sequenceFlow id="flowAutoApprove" name="Score &#62;= 700" sourceRef="scoreGateway" targetRef="autoApprovedEnd">
+      <conditionExpression xsi:type="tFormalExpression">${creditScore &gt;= 700}</conditionExpression>
     </sequenceFlow>
     <sequenceFlow id="flowManualReview" name="450-699" sourceRef="scoreGateway" targetRef="managerReview">
-      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${creditScore >= 450 && creditScore < 700}]]></conditionExpression>
+      <conditionExpression xsi:type="tFormalExpression">${creditScore &gt;= 450 &amp;&amp; creditScore &lt; 700}</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="flowAutoReject" name="Score &lt; 450" sourceRef="scoreGateway" targetRef="autoRejectedEnd">
-      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${creditScore < 450}]]></conditionExpression>
+    <sequenceFlow id="flowAutoReject" name="Score &#60; 450" sourceRef="scoreGateway" targetRef="autoRejectedEnd">
+      <conditionExpression xsi:type="tFormalExpression">${creditScore &lt; 450}</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="flowManagerToDecision" sourceRef="managerReview" targetRef="managerDecisionGateway"/>
+    <sequenceFlow id="flowManagerToDecision" sourceRef="managerReview" targetRef="managerDecisionGateway" />
     <sequenceFlow id="managerApprovedFlow" name="Approve" sourceRef="managerDecisionGateway" targetRef="approvedEnd">
-      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+      <conditionExpression xsi:type="tFormalExpression">${approved == true}</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="managerRejectedFlow" name="Reject" sourceRef="managerDecisionGateway" targetRef="rejectedEnd"/>
+    <sequenceFlow id="managerRejectedFlow" name="Reject" sourceRef="managerDecisionGateway" targetRef="rejectedEnd" />
   </process>
-
   <bpmndi:BPMNDiagram id="BPMNDiagram_creditCardSimple">
     <bpmndi:BPMNPlane id="BPMNPlane_creditCardSimple" bpmnElement="creditCardSimple">
       <bpmndi:BPMNShape id="start_di" bpmnElement="start">
-        <omgdc:Bounds x="80" y="190" width="36" height="36"/>
+        <omgdc:Bounds x="80" y="190" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="creditCheckTask_di" bpmnElement="creditCheckTask">
-        <omgdc:Bounds x="170" y="168" width="130" height="80"/>
+        <omgdc:Bounds x="170" y="168" width="130" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="scoreGateway_di" bpmnElement="scoreGateway" isMarkerVisible="true">
-        <omgdc:Bounds x="360" y="183" width="50" height="50"/>
+        <omgdc:Bounds x="360" y="183" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="autoApprovedEnd_di" bpmnElement="autoApprovedEnd">
-        <omgdc:Bounds x="500" y="80" width="36" height="36"/>
+        <omgdc:Bounds x="500" y="80" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="managerReview_di" bpmnElement="managerReview">
-        <omgdc:Bounds x="480" y="168" width="130" height="80"/>
+        <omgdc:Bounds x="480" y="168" width="130" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="managerDecisionGateway_di" bpmnElement="managerDecisionGateway" isMarkerVisible="true">
-        <omgdc:Bounds x="680" y="183" width="50" height="50"/>
+        <omgdc:Bounds x="680" y="183" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="approvedEnd_di" bpmnElement="approvedEnd">
-        <omgdc:Bounds x="820" y="120" width="36" height="36"/>
+        <omgdc:Bounds x="820" y="120" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="rejectedEnd_di" bpmnElement="rejectedEnd">
-        <omgdc:Bounds x="820" y="260" width="36" height="36"/>
+        <omgdc:Bounds x="820" y="260" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="autoRejectedEnd_di" bpmnElement="autoRejectedEnd">
-        <omgdc:Bounds x="500" y="320" width="36" height="36"/>
+        <omgdc:Bounds x="500" y="320" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="flowStartToCredit_di" bpmnElement="flowStartToCredit">
-        <omgdi:waypoint x="116" y="208"/><omgdi:waypoint x="170" y="208"/>
+        <omgdi:waypoint x="116" y="208" />
+        <omgdi:waypoint x="170" y="208" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flowCreditToGateway_di" bpmnElement="flowCreditToGateway">
-        <omgdi:waypoint x="300" y="208"/><omgdi:waypoint x="360" y="208"/>
+        <omgdi:waypoint x="300" y="208" />
+        <omgdi:waypoint x="360" y="208" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flowAutoApprove_di" bpmnElement="flowAutoApprove">
-        <omgdi:waypoint x="385" y="183"/><omgdi:waypoint x="385" y="98"/><omgdi:waypoint x="500" y="98"/>
+        <omgdi:waypoint x="385" y="183" />
+        <omgdi:waypoint x="385" y="98" />
+        <omgdi:waypoint x="500" y="98" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flowManualReview_di" bpmnElement="flowManualReview">
-        <omgdi:waypoint x="410" y="208"/><omgdi:waypoint x="480" y="208"/>
+        <omgdi:waypoint x="410" y="208" />
+        <omgdi:waypoint x="480" y="208" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flowAutoReject_di" bpmnElement="flowAutoReject">
-        <omgdi:waypoint x="385" y="233"/><omgdi:waypoint x="385" y="338"/><omgdi:waypoint x="500" y="338"/>
+        <omgdi:waypoint x="385" y="233" />
+        <omgdi:waypoint x="385" y="338" />
+        <omgdi:waypoint x="500" y="338" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="flowManagerToDecision_di" bpmnElement="flowManagerToDecision">
-        <omgdi:waypoint x="610" y="208"/><omgdi:waypoint x="680" y="208"/>
+        <omgdi:waypoint x="610" y="208" />
+        <omgdi:waypoint x="680" y="208" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="managerApprovedFlow_di" bpmnElement="managerApprovedFlow">
-        <omgdi:waypoint x="705" y="183"/><omgdi:waypoint x="705" y="138"/><omgdi:waypoint x="820" y="138"/>
+        <omgdi:waypoint x="705" y="183" />
+        <omgdi:waypoint x="705" y="138" />
+        <omgdi:waypoint x="820" y="138" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="managerRejectedFlow_di" bpmnElement="managerRejectedFlow">
-        <omgdi:waypoint x="705" y="233"/><omgdi:waypoint x="705" y="278"/><omgdi:waypoint x="820" y="278"/>
+        <omgdi:waypoint x="705" y="233" />
+        <omgdi:waypoint x="705" y="278" />
+        <omgdi:waypoint x="820" y="278" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

@@ -133,6 +133,7 @@ const PROCESS_CATALOG = [
     name: 'Credit Card — Simple (BPMN)',
     description: 'BPMN engine with HTTP Task credit check. Single manager approval for medium scores.',
     file: 'credit-card-simple.bpmn20.xml',
+    staticFile: 'credit-card-simple.bpmn',
     bpmnViewer: 'bpmn1',
   },
   {
@@ -140,9 +141,12 @@ const PROCESS_CATALOG = [
     name: 'Credit Card — Advanced (BPMN)',
     description: 'BPMN engine with HTTP Task credit check. Manager + Director for medium scores. Stricter threshold (≥750).',
     file: 'credit-card-advanced.bpmn20.xml',
+    staticFile: 'credit-card-advanced.bpmn',
     bpmnViewer: 'bpmn2',
   },
 ];
+
+const FRONTEND_PUBLIC_BPMN = path.join(__dirname, '..', 'frontend', 'public', 'bpmn');
 
 async function waitForFlowable(maxRetries = 30, delay = 5000) {
   for (let i = 0; i < maxRetries; i++) {
@@ -418,6 +422,96 @@ async function getVars(processInstanceId, historic) {
 async function getHistoricVars(processInstanceId) {
   return getVars(processInstanceId, true);
 }
+
+// ─── Live Monitor: running instances + current node ────────────────────────
+async function getRunningInstances(processKey) {
+  const keys = processKey ? [processKey] : PROCESS_CATALOG.map(p => p.key);
+
+  const lists = await Promise.all(keys.map(key =>
+    flowable.get('/runtime/process-instances', { params: { processDefinitionKey: key, size: 100 } })
+      .then(r => (r.data.data || []).map(p => ({ ...p, processKey: key })))
+      .catch(() => [])
+  ));
+  const instances = lists.flat();
+
+  return Promise.all(instances.map(async p => {
+    const [activities, vars] = await Promise.all([
+      flowable.get('/history/historic-activity-instances', {
+        params: { processInstanceId: p.id, finished: false, size: 50 },
+      }).then(r => r.data.data || []).catch(() => []),
+      getVars(p.id, false),
+    ]);
+
+    const currentActivities = activities.map(a => ({
+      id: a.activityId,
+      name: a.activityName || a.activityId,
+      type: a.activityType,
+    }));
+
+    const proc = PROCESS_CATALOG.find(c => c.key === p.processKey);
+    return {
+      id: p.id,
+      businessKey: p.businessKey,
+      processKey: p.processKey,
+      processName: proc?.name,
+      applicantName: vars.applicantName || null,
+      creditScore: vars.creditScore ?? null,
+      startTime: p.startTime,
+      currentActivities,
+    };
+  }));
+}
+
+app.get('/api/monitor/instances', async (req, res) => {
+  try {
+    const instances = await getRunningInstances(req.query.processKey);
+    instances.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    res.json(instances);
+  } catch (err) {
+    res.status(502).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+// ─── BPMN Editor routes ─────────────────────────────────────────────────────
+
+app.get('/api/bpmn/:key', (req, res) => {
+  try {
+    const proc = PROCESS_CATALOG.find(p => p.key === req.params.key);
+    if (!proc) return res.status(404).json({ error: 'unknown process key' });
+    const bpmnPath = path.join(__dirname, 'bpmn', proc.file);
+    if (!fs.existsSync(bpmnPath)) return res.status(404).json({ error: 'BPMN file not found' });
+    const xml = fs.readFileSync(bpmnPath, 'utf8');
+    res.json({ xml, key: proc.key, file: proc.file });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bpmn/:key/deploy', async (req, res) => {
+  try {
+    const proc = PROCESS_CATALOG.find(p => p.key === req.params.key);
+    if (!proc) return res.status(404).json({ error: 'unknown process key' });
+    const { xml } = req.body;
+    if (!xml) return res.status(400).json({ error: 'xml is required' });
+
+    fs.writeFileSync(path.join(__dirname, 'bpmn', proc.file), xml, 'utf8');
+
+    if (proc.staticFile) {
+      const staticPath = path.join(FRONTEND_PUBLIC_BPMN, proc.staticFile);
+      if (fs.existsSync(path.dirname(staticPath))) {
+        fs.writeFileSync(staticPath, xml, 'utf8');
+      }
+    }
+
+    const form = new FormData();
+    form.append('file', Buffer.from(xml), { filename: proc.file, contentType: 'application/xml' });
+    const deployed = await flowable.post('/repository/deployments', form, { headers: form.getHeaders() });
+
+    res.json({ success: true, deploymentId: deployed.data.id });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || err.message });
+  }
+});
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 
