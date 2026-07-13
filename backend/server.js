@@ -144,7 +144,27 @@ const PROCESS_CATALOG = [
     staticFile: 'credit-card-advanced.bpmn',
     bpmnViewer: 'bpmn2',
   },
+  {
+    key: 'assignmentFlow',
+    name: 'Assignment — มอบหมายงาน (BPMN)',
+    description: 'คำขอมอบหมายงานลูกหนี้ (NPL/NPA) ส่งให้ผู้อนุมัติ 1 คนพิจารณา อนุมัติ/ไม่อนุมัติ',
+    file: 'assignment-flow.bpmn20.xml',
+    staticFile: 'assignment-flow.bpmn',
+    bpmnViewer: 'assignment',
+    standalone: true, // มีหน้าจอ + endpoint แยก — ไม่รวมใน credit card requests/tasks
+  },
+  {
+    key: 'caseIntakeFlow',
+    name: 'Case Intake — ตั้งเรื่องคดี (BPMN)',
+    description: 'ตั้งเรื่องคดี (DRAFT) → เจ้าหน้าที่ยืนยันข้อมูล (WAIT_GLEAD) → หัวหน้ากลุ่มงานกฎหมายพิจารณา รับเรื่อง/ตีกลับ',
+    file: 'case-intake-flow.bpmn20.xml',
+    staticFile: 'case-intake-flow.bpmn',
+    bpmnViewer: 'caseIntake',
+    standalone: true,
+  },
 ];
+
+const creditProcesses = () => PROCESS_CATALOG.filter(p => !p.standalone);
 
 const FRONTEND_PUBLIC_BPMN = path.join(__dirname, '..', 'frontend', 'public', 'bpmn');
 
@@ -202,7 +222,7 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/processes', async (req, res) => {
   try {
     const bpmnResults = await Promise.all(
-      PROCESS_CATALOG.map(async proc => {
+      creditProcesses().map(async proc => {
         const r = await flowable.get('/repository/process-definitions', {
           params: { key: proc.key, latest: true },
         });
@@ -247,7 +267,7 @@ app.post('/api/requests', async (req, res) => {
       return res.status(400).json({ error: 'applicantName and nationalId are required' });
     }
 
-    const allValidKeys = ['fixedFlow', ...PROCESS_CATALOG.map(p => p.key)];
+    const allValidKeys = ['fixedFlow', ...creditProcesses().map(p => p.key)];
     if (!allValidKeys.includes(processKey)) {
       return res.status(400).json({ error: `invalid processKey. Valid: ${allValidKeys.join(', ')}` });
     }
@@ -291,7 +311,7 @@ app.post('/api/requests', async (req, res) => {
 
 app.get('/api/requests', async (req, res) => {
   try {
-    const allKeys = PROCESS_CATALOG.map(p => p.key);
+    const allKeys = creditProcesses().map(p => p.key);
 
     const [activeResults, historyResults] = await Promise.all([
       Promise.all(allKeys.map(key =>
@@ -340,7 +360,7 @@ app.get('/api/requests', async (req, res) => {
 
 app.get('/api/tasks', async (req, res) => {
   try {
-    const allKeys = PROCESS_CATALOG.map(p => p.key);
+    const allKeys = creditProcesses().map(p => p.key);
 
     const taskResults = await Promise.all(
       allKeys.map(key =>
@@ -403,12 +423,331 @@ app.post('/api/tasks/:id/complete', async (req, res) => {
   }
 });
 
+// ─── Assignment workflow (single approver) ─────────────────────────────────
+const ASSIGNMENT_KEY = 'assignmentFlow';
+
+app.post('/api/assignments', async (req, res) => {
+  try {
+    const {
+      debtorName, accountNo,
+      assetType = 'NPL', assigneeType = 'legal_officer',
+      requester = '', note = '',
+    } = req.body;
+
+    if (!debtorName || !accountNo) {
+      return res.status(400).json({ error: 'debtorName and accountNo are required' });
+    }
+
+    const result = await flowable.post('/runtime/process-instances', {
+      processDefinitionKey: ASSIGNMENT_KEY,
+      businessKey: `asg-${Date.now()}`,
+      variables: [
+        { name: 'debtorName', value: debtorName, type: 'string' },
+        { name: 'accountNo', value: accountNo, type: 'string' },
+        { name: 'assetType', value: assetType, type: 'string' },
+        { name: 'assigneeType', value: assigneeType, type: 'string' },
+        { name: 'requester', value: requester, type: 'string' },
+        { name: 'note', value: note, type: 'string' },
+        { name: 'processKey', value: ASSIGNMENT_KEY, type: 'string' },
+      ],
+    });
+
+    res.status(201).json({
+      id: result.data.id,
+      businessKey: result.data.businessKey,
+      status: 'pending',
+      processKey: ASSIGNMENT_KEY,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+app.get('/api/assignments', async (req, res) => {
+  try {
+    const [activeRes, historyRes] = await Promise.all([
+      flowable.get('/runtime/process-instances', { params: { processDefinitionKey: ASSIGNMENT_KEY, size: 100 } })
+        .then(r => r.data.data || []).catch(() => []),
+      flowable.get('/history/historic-process-instances', { params: { processDefinitionKey: ASSIGNMENT_KEY, finished: true, size: 100 } })
+        .then(r => r.data.data || []).catch(() => []),
+    ]);
+
+    const activeIds = new Set(activeRes.map(p => p.id));
+
+    const active = await Promise.all(activeRes.map(async p => {
+      const vars = await getVars(p.id, false);
+      return { id: p.id, businessKey: p.businessKey, status: 'pending', startTime: p.startTime, ...vars };
+    }));
+
+    const finished = await Promise.all(
+      historyRes.filter(p => !activeIds.has(p.id)).map(async p => {
+        const vars = await getHistoricVars(p.id);
+        const status = vars.approved === true ? 'approved' : vars.approved === false ? 'rejected' : 'completed';
+        return { id: p.id, businessKey: p.businessKey, status, startTime: p.startTime, endTime: p.endTime, ...vars };
+      })
+    );
+
+    res.json([...active, ...finished].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)));
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+app.get('/api/assignments/tasks', async (req, res) => {
+  try {
+    const r = await flowable.get('/runtime/tasks', { params: { processDefinitionKey: ASSIGNMENT_KEY, size: 100 } });
+    const tasks = await Promise.all((r.data.data || []).map(async task => {
+      const vars = await getVars(task.processInstanceId, false);
+      return {
+        id: task.id,
+        name: task.name,
+        processInstanceId: task.processInstanceId,
+        created: task.createTime,
+        ...vars,
+      };
+    }));
+    res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+// ─── Case Intake workflow (flow 5: ตั้งเรื่องคดี → GLEAD อนุมัติ) ──────────
+// Dual mode: ทุก action ยิง litigation-service จริง + sync สถานะเข้า Flowable engine
+// ผูกกันด้วย businessKey = `tled-{tledId}`
+const CASE_INTAKE_KEY = 'caseIntakeFlow';
+
+const LITIGATION_BASE_URL = process.env.LITIGATION_API_URL || 'http://172.26.59.78/api/litigation-service';
+const litigation = axios.create({
+  baseURL: `${LITIGATION_BASE_URL}/api/v1`,
+  timeout: 15000,
+});
+
+// ค่าจริงจาก GET /lookup/type/TRAN_STATUS และ ACTION_TYPE ของ litigation-service
+const CI_STATUS = { DRAFT: 53, WAIT_GLEAD: 56, WAIT_LAW_ACK: 57, NOT_AGREE: 180 };
+const CI_ACTION = { CONFIRM: 111, AGREE: 179, NOT_PASS: 422 };
+
+async function findCaseInstance(tledId) {
+  const r = await flowable.get('/runtime/process-instances', {
+    params: { businessKey: `tled-${tledId}`, processDefinitionKey: CASE_INTAKE_KEY, size: 1 },
+  });
+  return r.data.data?.[0] || null;
+}
+
+async function startCaseInstance(tledId, extraVars = {}) {
+  const variables = [
+    { name: 'tledId', value: Number(tledId), type: 'integer' },
+    { name: 'processKey', value: CASE_INTAKE_KEY, type: 'string' },
+    ...Object.entries(extraVars).map(([name, v]) => (
+      typeof v === 'number'
+        ? { name, value: v, type: 'integer' }
+        : { name, value: String(v ?? ''), type: 'string' }
+    )),
+  ];
+  const r = await flowable.post('/runtime/process-instances', {
+    processDefinitionKey: CASE_INTAKE_KEY,
+    businessKey: `tled-${tledId}`,
+    variables,
+  });
+  return r.data;
+}
+
+async function completeCaseTask(tledId, taskDefinitionKey, variables) {
+  const inst = await findCaseInstance(tledId);
+  if (!inst) return null;
+  const t = await flowable.get('/runtime/tasks', {
+    params: { processInstanceId: inst.id, taskDefinitionKey },
+  });
+  const task = t.data.data?.[0];
+  if (!task) return null;
+  await flowable.post(`/runtime/tasks/${task.id}`, { action: 'complete', variables });
+  return task.id;
+}
+
+// onSaveNewCase() — สร้างเคสบน litigation-service + start Flowable instance
+app.post('/api/case-intakes/create', async (req, res) => {
+  try {
+    const remote = await litigation.post('/case-intakes/create', req.body);
+    const tledId = remote.data?.tledId ?? remote.data?.id ?? null;
+
+    let flowableInstanceId = null;
+    if (tledId != null) {
+      try {
+        const inst = await startCaseInstance(tledId, {
+          fileNo: req.body.fileNo || '',
+          subject: req.body.subject || '',
+          statusTypeId: Number(req.body.statusTypeId) || CI_STATUS.DRAFT,
+        });
+        flowableInstanceId = inst.id;
+        console.log(`✓ CaseIntake tled-${tledId}: Flowable instance ${inst.id}`);
+      } catch (e) {
+        console.log(`⚠ Flowable start failed for tled-${tledId}: ${e.message}`);
+      }
+    }
+
+    res.status(201).json({ ...remote.data, flowableInstanceId });
+  } catch (err) {
+    res.status(err.response?.status || 500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+// onSubmit() request 1 — saveAggregate ไป remote + complete task officerSubmit บน Flowable
+app.post('/api/case-intakes/:id/save', async (req, res) => {
+  try {
+    const tledId = req.params.id;
+    const remote = await litigation.post(`/case-intakes/${tledId}/save`, req.body);
+
+    let flowableSynced = false;
+    try {
+      // เคสที่สร้างนอก POC (ไม่มี instance) → สร้างให้ก่อน
+      if (!(await findCaseInstance(tledId))) {
+        await startCaseInstance(tledId, { subject: req.body?.caseInfo?.subject || '' });
+      }
+      const done = await completeCaseTask(tledId, 'officerSubmit', [
+        { name: 'statusTypeId', value: Number(req.body?.caseInfo?.statusTypeId) || CI_STATUS.WAIT_GLEAD, type: 'integer' },
+        { name: 'subject', value: req.body?.caseInfo?.subject || '', type: 'string' },
+      ]);
+      flowableSynced = !!done;
+      if (done) console.log(`✓ CaseIntake tled-${tledId}: officerSubmit completed`);
+    } catch (e) {
+      console.log(`⚠ Flowable sync (save) failed for tled-${tledId}: ${e.message}`);
+    }
+
+    res.json({ ...(remote.data || {}), success: true, flowableSynced });
+  } catch (err) {
+    res.status(err.response?.status || 500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+// onSubmit() request 2 — forward createApproval ไป litigation-service
+app.post('/api/case-intake-approvals/create', async (req, res) => {
+  try {
+    const remote = await litigation.post('/case-intake-approvals/create', req.body);
+    res.status(201).json(remote.data ?? { success: true });
+  } catch (err) {
+    res.status(err.response?.status || 500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+// GLEAD ตัดสิน — ประวัติ + เปลี่ยนสถานะบน remote + complete task gleadReview บน Flowable
+app.post('/api/case-intakes/:id/decision', async (req, res) => {
+  try {
+    const tledId = req.params.id;
+    const { approved, comment = '', reviewer = '' } = req.body;
+    if (typeof approved !== 'boolean') {
+      return res.status(400).json({ error: 'approved (boolean) is required' });
+    }
+    const note = reviewer ? `${comment}${comment ? ' ' : ''}— โดย ${reviewer}` : comment;
+
+    // 1) ประวัติการพิจารณา (G เห็นชอบ / RJ ไม่ผ่าน)
+    await litigation.post('/case-intake-approvals/create', {
+      tledId: Number(tledId),
+      actionTypeId: approved ? CI_ACTION.AGREE : CI_ACTION.NOT_PASS,
+      action: approved ? 'เห็นชอบ' : 'ไม่ผ่านการพิจารณา',
+      comment: note || null,
+    });
+
+    // 2) เปลี่ยนสถานะเรื่องบน litigation-service
+    const cur = (await litigation.get(`/case-intakes/${tledId}`)).data;
+    await litigation.post(`/case-intakes/update/${tledId}`, {
+      fileNo: cur.fileNo,
+      statusTypeId: approved ? CI_STATUS.WAIT_LAW_ACK : CI_STATUS.NOT_AGREE,
+      stepId: cur.stepId ?? 1,
+      departmentId: cur.departmentId ?? 10,
+      buId: cur.buId ?? 10,
+      subject: cur.subject,
+      categoryId: cur.categoryId,
+      typeId: cur.typeId,
+      subTypeId: cur.subTypeId,
+      detailTypeId: cur.detailTypeId,
+      receivedDate: cur.receivedDate ?? null,
+      description: cur.description ?? null,
+      active: true,
+    });
+
+    // 3) sync Flowable: complete gleadReview (เคสเก่าไม่มี instance → สร้าง + fast-forward)
+    let flowableSynced = false;
+    try {
+      if (!(await findCaseInstance(tledId))) {
+        await startCaseInstance(tledId, { fileNo: cur.fileNo || '', subject: cur.subject || '' });
+        await completeCaseTask(tledId, 'officerSubmit', [
+          { name: 'statusTypeId', value: CI_STATUS.WAIT_GLEAD, type: 'integer' },
+        ]);
+      }
+      const done = await completeCaseTask(tledId, 'gleadReview', [
+        { name: 'approved', value: approved, type: 'boolean' },
+        { name: 'comment', value: comment, type: 'string' },
+        { name: 'reviewer', value: reviewer || 'glead', type: 'string' },
+      ]);
+      flowableSynced = !!done;
+      if (done) console.log(`✓ CaseIntake tled-${tledId}: gleadReview completed (approved=${approved})`);
+    } catch (e) {
+      console.log(`⚠ Flowable sync (decision) failed for tled-${tledId}: ${e.message}`);
+    }
+
+    res.json({ success: true, approved, flowableSynced });
+  } catch (err) {
+    res.status(err.response?.status || 500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+app.get('/api/case-intakes', async (req, res) => {
+  try {
+    const [activeRes, historyRes] = await Promise.all([
+      flowable.get('/runtime/process-instances', { params: { processDefinitionKey: CASE_INTAKE_KEY, size: 100 } })
+        .then(r => r.data.data || []).catch(() => []),
+      flowable.get('/history/historic-process-instances', { params: { processDefinitionKey: CASE_INTAKE_KEY, finished: true, size: 100 } })
+        .then(r => r.data.data || []).catch(() => []),
+    ]);
+
+    const activeIds = new Set(activeRes.map(p => p.id));
+
+    const active = await Promise.all(activeRes.map(async p => {
+      const vars = await getVars(p.id, false);
+      const status = vars.statusTypeId === 2 ? 'wait_glead' : 'draft';
+      return { id: p.id, businessKey: p.businessKey, status, startTime: p.startTime, ...vars };
+    }));
+
+    const finished = await Promise.all(
+      historyRes.filter(p => !activeIds.has(p.id)).map(async p => {
+        const vars = await getHistoricVars(p.id);
+        const status = vars.approved === true ? 'approved' : vars.approved === false ? 'rejected' : 'completed';
+        return { id: p.id, businessKey: p.businessKey, status, startTime: p.startTime, endTime: p.endTime, ...vars };
+      })
+    );
+
+    res.json([...active, ...finished].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)));
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
+app.get('/api/case-intakes/tasks', async (req, res) => {
+  try {
+    const r = await flowable.get('/runtime/tasks', { params: { processDefinitionKey: CASE_INTAKE_KEY, size: 100 } });
+    const tasks = await Promise.all((r.data.data || []).map(async task => {
+      const vars = await getVars(task.processInstanceId, false);
+      return {
+        id: task.id,
+        name: task.name,
+        taskDefinitionKey: task.taskDefinitionKey,
+        processInstanceId: task.processInstanceId,
+        created: task.createTime,
+        ...vars,
+      };
+    }));
+    res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.message || err.message });
+  }
+});
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 async function getVars(processInstanceId, historic) {
   try {
     const url = historic
-      ? `/history/historic-variable-instances?processInstanceId=${processInstanceId}`
+      ? `/history/historic-variable-instances?processInstanceId=${processInstanceId}&size=200`
       : `/runtime/process-instances/${processInstanceId}/variables`;
     const res = await flowable.get(url);
     const list = res.data.data || res.data || [];
@@ -454,7 +793,7 @@ async function getRunningInstances(processKey) {
       businessKey: p.businessKey,
       processKey: p.processKey,
       processName: proc?.name,
-      applicantName: vars.applicantName || null,
+      applicantName: vars.applicantName || vars.debtorName || null,
       creditScore: vars.creditScore ?? null,
       startTime: p.startTime,
       currentActivities,

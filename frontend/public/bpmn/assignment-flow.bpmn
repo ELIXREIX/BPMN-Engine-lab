@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.flowable.org/processdef">
+  <process id="assignmentFlow" name="Assignment Approval (Single Approver)" isExecutable="true">
+    <startEvent id="start" name="สร้างคำขอมอบหมายงาน (NPL/NPA)"/>
+    <userTask id="approverReview" name="ผู้อนุมัติ พิจารณาอนุมัติ" flowable:candidateGroups="approvers">
+      <documentation>ผู้อนุมัติ 1 คน พิจารณาคำขอมอบหมายงานลูกหนี้</documentation>
+    </userTask>
+    <exclusiveGateway id="approvalGateway" name="อนุมัติ?" default="rejectedFlow"/>
+    <endEvent id="approvedEnd" name="อนุมัติ — มอบหมายงานสำเร็จ"/>
+    <endEvent id="rejectedEnd" name="ไม่อนุมัติ"/>
+    <sequenceFlow id="flowStartToApprover" sourceRef="start" targetRef="approverReview"/>
+    <sequenceFlow id="flowApproverToGateway" sourceRef="approverReview" targetRef="approvalGateway"/>
+    <sequenceFlow id="approvedFlow" name="อนุมัติ" sourceRef="approvalGateway" targetRef="approvedEnd">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="rejectedFlow" name="ไม่อนุมัติ" sourceRef="approvalGateway" targetRef="rejectedEnd"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_assignmentFlow">
+    <bpmndi:BPMNPlane id="BPMNPlane_assignmentFlow" bpmnElement="assignmentFlow">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="80" y="190" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="approverReview_di" bpmnElement="approverReview">
+        <omgdc:Bounds x="180" y="168" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="approvalGateway_di" bpmnElement="approvalGateway" isMarkerVisible="true">
+        <omgdc:Bounds x="400" y="183" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="approvedEnd_di" bpmnElement="approvedEnd">
+        <omgdc:Bounds x="540" y="120" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="rejectedEnd_di" bpmnElement="rejectedEnd">
+        <omgdc:Bounds x="540" y="260" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="flowStartToApprover_di" bpmnElement="flowStartToApprover">
+        <omgdi:waypoint x="116" y="208"/>
+        <omgdi:waypoint x="180" y="208"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flowApproverToGateway_di" bpmnElement="flowApproverToGateway">
+        <omgdi:waypoint x="330" y="208"/>
+        <omgdi:waypoint x="400" y="208"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="approvedFlow_di" bpmnElement="approvedFlow">
+        <omgdi:waypoint x="425" y="183"/>
+        <omgdi:waypoint x="425" y="138"/>
+        <omgdi:waypoint x="540" y="138"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="rejectedFlow_di" bpmnElement="rejectedFlow">
+        <omgdi:waypoint x="425" y="233"/>
+        <omgdi:waypoint x="425" y="278"/>
+        <omgdi:waypoint x="540" y="278"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

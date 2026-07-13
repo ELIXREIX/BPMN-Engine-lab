@@ -5,6 +5,10 @@ const navItems = [
   { to: '/new', label: 'New Application', icon: '+' },
   { to: '/tasks', label: 'Review Inbox', icon: 'R' },
   { to: '/requests', label: 'Applications', icon: 'A' },
+  { to: '/assignment/new', label: 'สร้างคำขอมอบหมายงาน', icon: '+' },
+  { to: '/assignment/approvals', label: 'อนุมัติมอบหมายงาน', icon: '✓' },
+  { to: '/case-intake', label: 'ตั้งเรื่องคดี', icon: 'C' },
+  { to: '/case-intake/approvals', label: 'พิจารณาเรื่องคดี (GLEAD)', icon: 'G' },
   { to: '/workflow', label: 'Workflow Viewer', icon: 'W' },
   { to: '/manual', label: 'User Manual', icon: '?' },
 ];
