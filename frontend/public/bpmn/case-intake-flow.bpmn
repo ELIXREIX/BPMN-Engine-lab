@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.flowable.org/processdef">
+  <process id="caseIntakeFlow" name="Case Intake (ตั้งเรื่องคดี)" isExecutable="true">
+    <startEvent id="start" name="ตั้งเรื่องคดี (DRAFT)"/>
+    <userTask id="officerSubmit" name="เจ้าหน้าที่ กรอกข้อมูลคดี และยืนยันข้อมูล" flowable:candidateGroups="legal-officers">
+      <documentation>บันทึกข้อมูล 3 tab (ลูกหนี้/สัญญา/หลักประกัน + วิเคราะห์กฎหมาย) แล้วยืนยันข้อมูล → สถานะ WAIT_GLEAD</documentation>
+    </userTask>
+    <userTask id="gleadReview" name="หัวหน้ากลุ่มงานกฎหมาย (GLEAD) พิจารณา" flowable:candidateGroups="glead">
+      <documentation>ผู้อนุมัติพิจารณารับเรื่องคดีเข้าดำเนินการ</documentation>
+    </userTask>
+    <exclusiveGateway id="approvalGateway" name="อนุมัติ?" default="rejectedFlow"/>
+    <endEvent id="approvedEnd" name="รับเรื่อง — ส่งดำเนินคดี"/>
+    <endEvent id="rejectedEnd" name="ตีกลับ — ไม่รับเรื่อง"/>
+    <sequenceFlow id="flowStartToSubmit" sourceRef="start" targetRef="officerSubmit"/>
+    <sequenceFlow id="flowSubmitToGlead" name="ยืนยันข้อมูล (WAIT_GLEAD)" sourceRef="officerSubmit" targetRef="gleadReview"/>
+    <sequenceFlow id="flowGleadToGateway" sourceRef="gleadReview" targetRef="approvalGateway"/>
+    <sequenceFlow id="approvedFlow" name="อนุมัติ" sourceRef="approvalGateway" targetRef="approvedEnd">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="rejectedFlow" name="ไม่อนุมัติ" sourceRef="approvalGateway" targetRef="rejectedEnd"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_caseIntakeFlow">
+    <bpmndi:BPMNPlane id="BPMNPlane_caseIntakeFlow" bpmnElement="caseIntakeFlow">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="80" y="190" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="officerSubmit_di" bpmnElement="officerSubmit">
+        <omgdc:Bounds x="180" y="168" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gleadReview_di" bpmnElement="gleadReview">
+        <omgdc:Bounds x="410" y="168" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="approvalGateway_di" bpmnElement="approvalGateway" isMarkerVisible="true">
+        <omgdc:Bounds x="630" y="183" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="approvedEnd_di" bpmnElement="approvedEnd">
+        <omgdc:Bounds x="770" y="120" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="rejectedEnd_di" bpmnElement="rejectedEnd">
+        <omgdc:Bounds x="770" y="260" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="flowStartToSubmit_di" bpmnElement="flowStartToSubmit">
+        <omgdi:waypoint x="116" y="208"/>
+        <omgdi:waypoint x="180" y="208"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flowSubmitToGlead_di" bpmnElement="flowSubmitToGlead">
+        <omgdi:waypoint x="330" y="208"/>
+        <omgdi:waypoint x="410" y="208"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flowGleadToGateway_di" bpmnElement="flowGleadToGateway">
+        <omgdi:waypoint x="560" y="208"/>
+        <omgdi:waypoint x="630" y="208"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="approvedFlow_di" bpmnElement="approvedFlow">
+        <omgdi:waypoint x="655" y="183"/>
+        <omgdi:waypoint x="655" y="138"/>
+        <omgdi:waypoint x="770" y="138"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="rejectedFlow_di" bpmnElement="rejectedFlow">
+        <omgdi:waypoint x="655" y="233"/>
+        <omgdi:waypoint x="655" y="278"/>
+        <omgdi:waypoint x="770" y="278"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

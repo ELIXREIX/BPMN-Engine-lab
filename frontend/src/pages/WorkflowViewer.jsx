@@ -36,6 +36,26 @@ const FLOWS = [
     editable: true,
     key: 'creditCardAdvanced',
   },
+  {
+    id: 'assignment',
+    label: 'Assignment Flow',
+    subtitle: 'มอบหมายงาน — ผู้อนุมัติ 1 คน',
+    file: '/bpmn/assignment-flow.bpmn',
+    color: '#7c3aed',
+    description: 'คำขอมอบหมายงานลูกหนี้ (NPL/NPA) ส่งให้ผู้อนุมัติ 1 คนพิจารณา — อนุมัติหรือไม่อนุมัติ รันบน Flowable engine ผ่านหน้าสร้างคำขอและหน้าอนุมัติ',
+    editable: true,
+    key: 'assignmentFlow',
+  },
+  {
+    id: 'caseIntake',
+    label: 'Case Intake',
+    subtitle: 'ตั้งเรื่องคดี → GLEAD พิจารณา',
+    file: '/bpmn/case-intake-flow.bpmn',
+    color: '#0891b2',
+    description: 'ตั้งเรื่องคดี (DRAFT) → เจ้าหน้าที่กรอกข้อมูลและยืนยัน (WAIT_GLEAD) → หัวหน้ากลุ่มงานกฎหมายพิจารณา รับเรื่อง/ตีกลับ — จำลอง flow จาก litigation-service (create + saveAggregate + approval)',
+    editable: true,
+    key: 'caseIntakeFlow',
+  },
 ];
 
 // ── Live monitor panel ───────────────────────────────────────────────────────
